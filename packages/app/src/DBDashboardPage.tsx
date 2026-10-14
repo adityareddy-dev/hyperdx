@@ -36,6 +36,10 @@ import {
 } from '@hyperdx/common-utils/dist/core/utils';
 import { getBlockingRequiredFilterNames } from '@hyperdx/common-utils/dist/dashboardFilterValues';
 import {
+  getPromqlFilters,
+  getSqlFilters,
+} from '@hyperdx/common-utils/dist/filters';
+import {
   displayTypeRequiresSource,
   isBuilderChartConfig,
   isBuilderSavedChartConfig,
@@ -51,12 +55,12 @@ import {
 import { isMissingFiltersMacro } from '@hyperdx/common-utils/dist/macros';
 import {
   AlertState,
+  BroadcastFilter,
   ChartConfigWithDateRange,
   ChartVariable,
   DashboardContainer as DashboardContainerSchema,
   DashboardFilter,
   DisplayType,
-  Filter,
   getSampleWeightExpression,
   isLogSource,
   isTraceSource,
@@ -471,7 +475,7 @@ const Tile = ({
   onSettled?: () => void;
   granularity: SQLInterval | undefined;
   onTimeRangeSelect: (start: Date, end: Date) => void;
-  filters?: Filter[];
+  filters?: BroadcastFilter[];
   variables?: ChartVariable[];
   /** The dashboard's required filters that have nothing selected. */
   unsatisfiedRequiredFilters?: DashboardFilter[];
@@ -654,6 +658,15 @@ const Tile = ({
     missingRequiredFilterNames.length > 0 &&
     displayTypeRequiresSource(chart.config.displayType);
 
+  const sqlFilters = useMemo(
+    () => (filters ? getSqlFilters(filters) : undefined),
+    [filters],
+  );
+  const promqlFilters = useMemo(
+    () => (filters ? getPromqlFilters(filters) : undefined),
+    [filters],
+  );
+
   useEffect(() => {
     if (isPromqlSavedChartConfig(chart.config)) {
       if (source != null) {
@@ -664,6 +677,7 @@ const Tile = ({
           dateRange,
           granularity,
           variables: tileVariables,
+          filters: promqlFilters,
         });
       }
       return;
@@ -676,7 +690,7 @@ const Tile = ({
           ...chart.config,
           dateRange,
           granularity,
-          filters,
+          filters: sqlFilters,
           variables: tileVariables,
         });
       } else if (source != null) {
@@ -695,7 +709,7 @@ const Tile = ({
           sampleWeightExpression: getSampleWeightExpression(source),
           dateRange,
           granularity,
-          filters,
+          filters: sqlFilters,
           variables: tileVariables,
         });
       }
@@ -736,13 +750,21 @@ const Tile = ({
             ? source.bodyExpression
             : undefined,
           sampleWeightExpression: getSampleWeightExpression(source),
-          filters,
+          filters: sqlFilters,
           variables: tileVariables,
           metricTables: isMetricSource ? source.metricTables : undefined,
         });
       }
     }
-  }, [source, chart, dateRange, granularity, filters, tileVariables]);
+  }, [
+    source,
+    chart,
+    dateRange,
+    granularity,
+    sqlFilters,
+    promqlFilters,
+    tileVariables,
+  ]);
 
   const [hovered, setHovered] = useState(false);
 
@@ -813,7 +835,7 @@ const Tile = ({
       where: builderConfig?.where,
       whereLanguage: builderConfig?.whereLanguage,
       select: builderConfig?.select,
-      filters,
+      filters: sqlFilters,
     },
   );
 
@@ -823,10 +845,10 @@ const Tile = ({
   );
 
   const filterWarning = useMemo(() => {
-    const doFiltersExist = !!filters?.filter(
+    const doFiltersExist = !!sqlFilters?.filter(
       f => (f.type === 'lucene' || f.type === 'sql') && f.condition.trim(),
     )?.length;
-    const doLuceneFiltersExist = !!filters?.filter(
+    const doLuceneFiltersExist = !!sqlFilters?.filter(
       f => f.type === 'lucene' && f.condition.trim(),
     )?.length;
 
@@ -862,7 +884,7 @@ const Tile = ({
         <IconZoomExclamation size={16} color="var(--color-text-danger)" />
       </Tooltip>
     );
-  }, [filters, queriedConfig, source]);
+  }, [sqlFilters, queriedConfig, source]);
 
   const replaySearchUrl = useMemo(() => {
     return buildDashboardReplaySearchUrl({
@@ -1656,7 +1678,7 @@ const EditTileModal = ({
   isSaving?: boolean;
   onSave: (chart: Tile) => void;
   variables?: ChartVariable[];
-  getDashboardFilters: (sourceId: string | undefined) => Filter[];
+  getDashboardFilters: (sourceId: string | undefined) => BroadcastFilter[];
   unsatisfiedRequiredFilters?: DashboardFilter[];
 }) => {
   const contextZIndex = useZIndex();
@@ -2435,7 +2457,7 @@ function DBDashboardPage({
   // `sourceId`. Shared with the tile editor so its preview queries what the
   // tile does.
   const getTileFilters = useCallback(
-    (sourceId: string | undefined): Filter[] => [
+    (sourceId: string | undefined): BroadcastFilter[] => [
       {
         type: whereLanguage === 'sql' ? 'sql' : 'lucene',
         condition: where,
