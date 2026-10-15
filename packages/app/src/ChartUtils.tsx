@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
 import { add, differenceInSeconds } from 'date-fns';
+import {
+  createSerializer,
+  parseAsBoolean,
+  parseAsFloat,
+  parseAsString,
+  parseAsStringEnum,
+} from 'nuqs';
 import SqlString from 'sqlstring';
 import { z } from 'zod';
 import {
@@ -50,6 +57,7 @@ import { notifications } from '@mantine/notifications';
 
 import DateRangeIndicator from './components/charts/DateRangeIndicator';
 import { MVOptimizationExplanationResult } from './hooks/useMVOptimizationExplanation';
+import { parseAsJsonEncoded, parseAsStringEncoded } from './utils/queryParsers';
 import {
   DEFAULT_SERIES_LIMIT,
   MAX_RENDERED_TIME_CHART_SERIES,
@@ -1380,36 +1388,55 @@ export function buildEventsSearchUrl({
   const from = dateRange[0].getTime();
   const to = dateRange[1].getTime();
 
-  const params: Record<string, string> = {
-    source: source?.id ?? '',
-    where: where,
-    whereLanguage: whereLanguage,
-    filters: JSON.stringify([...(config.filters ?? []), ...additionalFilters]),
-    isLive: 'false',
-    from: from.toString(),
-    to: to.toString(),
-  };
+  // Metric charts drill down into the correlated log source and drop the
+  // builder's where/filters, which have no meaning there.
+  const isMetricDrilldown = isMetricChart;
 
-  // If its a metric chart, we don't pass the where and filters
-  if (isMetricChart) {
-    params.where = '';
-    params.whereLanguage = 'lucene';
-    params.filters = JSON.stringify([]);
-    params.source =
-      (source.kind === SourceKind.Metric || source.kind === SourceKind.Trace
-        ? source.logSourceId
-        : undefined) ?? '';
-  }
-
-  // Include the select parameter if provided to preserve custom columns
-  // eventTableSelect is used for charts that override select (like histograms with count)
-  // to preserve the original table's select expression
-  if (config.eventTableSelect) {
-    params.select = config.eventTableSelect;
-  }
-
-  return `/search?${new URLSearchParams(params).toString()}`;
+  return buildSearchPageUrl({
+    source: isMetricDrilldown
+      ? ((source.kind === SourceKind.Metric || source.kind === SourceKind.Trace
+          ? source.logSourceId
+          : undefined) ?? '')
+      : (source?.id ?? ''),
+    where: isMetricDrilldown ? '' : where,
+    // The search page only parses 'sql' | 'lucene'; map anything else to lucene.
+    whereLanguage:
+      !isMetricDrilldown && whereLanguage === 'sql' ? 'sql' : 'lucene',
+    filters: isMetricDrilldown
+      ? []
+      : [...(config.filters ?? []), ...additionalFilters],
+    isLive: false,
+    from,
+    to,
+    // eventTableSelect preserves custom columns (e.g. histograms that override
+    // select with count); omit the param when it's absent.
+    select: config.eventTableSelect || undefined,
+  });
 }
+
+/**
+ * Serialize the search page's query params exactly as nuqs does on that page.
+ *
+ * The search page reads and writes these params with nuqs, which double-encodes
+ * values (its `encodeQueryValue` layered on top of each parser's own encoding).
+ * Building the URL with a plain `URLSearchParams` instead single-encodes them,
+ * so the first nuqs URL update on the search page (e.g. applying the default
+ * time range) reads a value like `%0A` back as a literal newline and re-renders
+ * it with `encodeQueryValue`, which does not escape newlines/tabs/carriage
+ * returns — the browser then strips those characters, silently joining
+ * multi-line SQL (`and\nNamespace` → `andNamespace`). Serializing with nuqs's
+ * own parsers keeps the URL stable across that read/write cycle.
+ */
+const buildSearchPageUrl = createSerializer({
+  source: parseAsString,
+  where: parseAsStringEncoded,
+  whereLanguage: parseAsStringEnum<'sql' | 'lucene'>(['sql', 'lucene']),
+  filters: parseAsJsonEncoded<Filter[]>(),
+  isLive: parseAsBoolean,
+  from: parseAsFloat,
+  to: parseAsFloat,
+  select: parseAsStringEncoded,
+}).bind(null, '/search');
 
 export function buildDashboardReplaySearchUrl({
   source,

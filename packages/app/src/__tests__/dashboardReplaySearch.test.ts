@@ -9,6 +9,13 @@ import {
 
 import { buildDashboardReplaySearchUrl } from '@/ChartUtils';
 
+// The search page reads these params with nuqs (double-encoded). Mirror that
+// read path so the tests assert the value the destination actually recovers.
+const readWhere = (url: URL) =>
+  decodeURIComponent(url.searchParams.get('where') ?? '');
+const readFilters = (url: URL) =>
+  JSON.parse(decodeURIComponent(url.searchParams.get('filters') ?? '[]'));
+
 const dateRange: [Date, Date] = [
   new Date('2026-01-01T00:00:00.000Z'),
   new Date('2026-01-01T01:00:00.000Z'),
@@ -66,8 +73,8 @@ describe('buildDashboardReplaySearchUrl', () => {
     const url = new URL(result ?? '', 'http://localhost');
     expect(url.pathname).toBe('/search');
     expect(url.searchParams.get('source')).toBe('logs');
-    expect(url.searchParams.get('where')).toBe('service:web');
-    expect(JSON.parse(url.searchParams.get('filters') ?? '')).toEqual([
+    expect(readWhere(url)).toBe('service:web');
+    expect(readFilters(url)).toEqual([
       { type: 'sql', condition: "SeverityText = 'error'" },
     ]);
     expect(url.searchParams.get('from')).toBe(
@@ -93,9 +100,35 @@ describe('buildDashboardReplaySearchUrl', () => {
     });
 
     expect(result).not.toBeNull();
-    expect(
-      new URL(result ?? '', 'http://localhost').searchParams.get('where'),
-    ).toBe('status:error');
+    expect(readWhere(new URL(result ?? '', 'http://localhost'))).toBe(
+      'status:error',
+    );
+  });
+
+  it('preserves newlines in a multi-line SQL where through the nuqs round-trip', () => {
+    const multilineWhere = [
+      "ServiceName = 'receive' and",
+      "RA['cluster_type'] = 'data-plane' and",
+      "Namespace = 'lighthouse'",
+    ].join('\n');
+
+    const result = buildDashboardReplaySearchUrl({
+      source: logSource,
+      config: { ...builderConfig, where: multilineWhere, whereLanguage: 'sql' },
+      dateRange,
+    });
+
+    expect(result).not.toBeNull();
+
+    const query = (result ?? '').split('?')[1] ?? '';
+    // nuqs reads one layer via URLSearchParams; the recovered value must not
+    // contain a literal newline, or nuqs's next URL re-render emits a raw
+    // newline that the browser strips, joining the lines.
+    const nuqsRead = new URLSearchParams(query).get('where') ?? '';
+    expect(nuqsRead).not.toMatch(/[\n\r]/);
+
+    // The destination then parses it (decodeURIComponent) back to the original.
+    expect(decodeURIComponent(nuqsRead)).toBe(multilineWhere);
   });
 
   it('rejects per-series conditions that cannot be faithfully replayed', () => {
