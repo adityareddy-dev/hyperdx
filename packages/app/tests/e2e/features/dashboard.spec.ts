@@ -2286,7 +2286,11 @@ test.describe('Dashboard', { tag: ['@dashboard'] }, () => {
 
           const href = (await link.getAttribute('href')) ?? '';
           const params = new URL(href, 'http://localhost').searchParams;
-          expect(params.get('where')).toBe("(ServiceName IN ('accounting'))");
+          // The search page reads `where` with nuqs (double-encoded), so decode
+          // the extra layer before asserting on the expanded predicate.
+          expect(decodeURIComponent(params.get('where') ?? '')).toBe(
+            "(ServiceName IN ('accounting'))",
+          );
           expect(decodeURIComponent(href)).not.toContain('$svc');
         });
 
@@ -2301,9 +2305,11 @@ test.describe('Dashboard', { tag: ['@dashboard'] }, () => {
           const searchPage = new SearchPage(searchTab);
 
           await expect(searchTab).toHaveURL(/\/search\?/, { timeout: 15000 });
-          expect(new URL(searchTab.url()).searchParams.get('where')).toBe(
-            "(ServiceName IN ('accounting'))",
-          );
+          expect(
+            decodeURIComponent(
+              new URL(searchTab.url()).searchParams.get('where') ?? '',
+            ),
+          ).toBe("(ServiceName IN ('accounting'))");
 
           await expect(searchPage.table.firstRow).toBeVisible({
             timeout: 30000,
