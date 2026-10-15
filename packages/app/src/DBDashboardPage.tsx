@@ -676,12 +676,15 @@ const Tile = ({
     () =>
       onFilter && source && (isLogSource(source) || isTraceSource(source))
         ? {
+            // Only the cell popover passes an action; the side panel's
+            // "Add to filters" passes none and shouldn't toggle a condition off.
             onPropertyAddClick: (key, value, action) =>
               onFilter(
                 [{ key, value: String(value) }],
-                action === 'exclude' ? 'exclude' : 'include',
+                action === 'include' || action === 'exclude' ? action : 'add',
               ),
             source,
+            isAdhocFilterTarget: true,
           }
         : undefined,
     [onFilter, source],
@@ -1500,7 +1503,6 @@ const Tile = ({
                       variant="default"
                       errorVariant="collapsible"
                       context={searchRowContext}
-                      isAdhocFilterTarget
                     />
                   </ChartContainer>
                 )}

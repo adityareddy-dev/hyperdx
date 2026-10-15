@@ -13,6 +13,7 @@ import {
   INTERESTING_FILTER_KEYS_SOURCE_NAME,
 } from '../utils/constants';
 import {
+  adhocConditionsParam,
   expectFiltersParam,
   type FilterEntry,
   filtersParam,
@@ -256,22 +257,60 @@ test.describe(
         { name: 'Conditions', sources: [DEFAULT_LOGS_SOURCE_NAME] },
       ]);
 
-      await new TableComponent(page).clickFirstRow();
-      await new SidePanelComponent(
-        page,
-        'row-side-panel',
-      ).addParsedFieldToFilter('ServiceName');
-      await expect
-        .poll(() => filtersParam(page))
-        .toEqual([
-          {
-            type: 'adhoc',
-            name: 'Conditions',
-            conditions: [
-              { key: 'ServiceName', operator: '=', value: expect.any(String) },
-            ],
-          },
-        ]);
+      const sidePanel = new SidePanelComponent(page, 'row-side-panel');
+      const serviceCondition = {
+        key: 'ServiceName',
+        operator: '=',
+        value: expect.any(String),
+      };
+      const expectServiceCondition = () =>
+        expect
+          .poll(() => filtersParam(page))
+          .toEqual([
+            {
+              type: 'adhoc',
+              name: 'Conditions',
+              conditions: [serviceCondition],
+            },
+          ]);
+
+      await test.step('Add to filters adds a condition', async () => {
+        await new TableComponent(page).clickFirstRow();
+        await sidePanel.addParsedFieldToFilter('ServiceName');
+        await expectServiceCondition();
+      });
+
+      await test.step('Adding it again keeps the condition', async () => {
+        await sidePanel.addParsedFieldToFilter('ServiceName');
+        await expectServiceCondition();
+      });
+
+      await test.step('Surrounding context cells are shaped like tile cells', async () => {
+        const [{ value: serviceName }] = adhocConditionsParam(
+          page,
+          'Conditions',
+        );
+        await sidePanel.clickTab('context');
+        const contextTable = sidePanel.contextTab.getByTestId(
+          'search-results-table',
+        );
+        const includeAction = contextTable.getByRole('button', {
+          name: 'Toggle filter for this value',
+        });
+        await contextTable
+          .getByText(serviceName, { exact: true })
+          .first()
+          .hover();
+        await expect(includeAction.last()).toBeVisible();
+        await contextTable
+          .getByText(/\d:\d{2}:\d{2}\.\d{3}/)
+          .first()
+          .hover();
+        await expect(
+          contextTable.getByRole('button', { name: 'Copy field value' }).last(),
+        ).toBeVisible();
+        await expect(includeAction).toHaveCount(0);
+      });
     });
 
     test('offers filter actions only where an ad hoc filter applies', async () => {

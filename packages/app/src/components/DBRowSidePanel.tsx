@@ -113,6 +113,11 @@ export type RowSidePanelContextProps = {
   setChildModalOpen?: (open: boolean) => void;
   source?: TLogSource | TTraceSource;
   onOpenLinkedTrace?: (link: SpanLinkData) => void;
+  /**
+   * onPropertyAddClick updates ad hoc dashboard filters. Tables shape
+   * each cell's key and value for that with getAdhocCellCondition.
+   */
+  isAdhocFilterTarget?: boolean;
 };
 
 export const RowSidePanelContext = createContext<RowSidePanelContextProps>({});
