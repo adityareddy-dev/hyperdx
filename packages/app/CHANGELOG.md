@@ -1,5 +1,59 @@
 # @hyperdx/app
 
+## 2.41.1
+
+### Patch Changes
+
+- a682ce13: feat: Render adhoc dashboard filter inputs
+- 9891a791: feat: Add ad hoc dashboard filter schemas and types
+- 43b09a7d: feat: Add UI for configuring adhoc dashboard filters
+- 72ed4062: fix: the time picker no longer resets a selected date range to the current
+  year. The range text now includes the year when the range isn't in the current
+  year (or reaches into the future), so it survives being re-parsed.
+- c0af58bc: fix: Let the Services > Database query drawer use the span attribute skip index instead of scanning the whole trace window
+- f33fc83c: Count spans recorded with the legacy `STATUS_CODE_ERROR` status as errors on the Services and LLM dashboards. The errored-span definition now lives in one place and matches both that value and the short `Error` form, so those dashboards no longer undercount errors from collectors that emit the long form.
+- 7d77d276: fix: Fix table sort state and support order by without asc/desc
+- 0840b8b8: feat: Support source remapping during ad hoc filter import
+- 2c2295fd: feat: use the click-ui `Badge` for all status badges on the Kubernetes dashboard
+  and its node, namespace, and pod drawers.
+- 3db148a0: feat: use the click-ui `Badge` for the model, provider, tool, agent, and chat
+  role badges in the LLM span panel, session drawer, and dashboard.
+- bc0a1e47: refactor: Look up every source in useMultipleGetKeyValues and keep partial results when one fails
+- f21bdb85: fix: keys inside Map and JSON filter groups (e.g. `LogAttributes`) in the search
+  page filter sidebar stay expanded or collapsed after scrolling them out of view
+  and back.
+- b000bbba: fix: add a key search to Map and JSON filter groups (e.g. `ResourceAttributes`,
+  `LogAttributes`) in the search page filter sidebar, matching the value search on
+  regular filters.
+- 5cabc115: feat: Support distribution heatmaps calculated from promql data
+- 07de6134: refactor: useMultipleAllFields returns each table connection's fields and columns.
+- 3bedfab3: feat: Support histogram heatmaps from PromQL bucket metrics
+- c94d12c3: fix: Resolve PromQL queries through the source instead of a caller-supplied connection and table
+
+  The `/api/v1/prometheus/*` routes now take `sourceId` instead of `connectionId`, and read the connection and TimeSeries table from that PromQL source. Caller-supplied `database`/`table` params are ignored for ClickHouse and no longer forwarded to external Prometheus endpoints. Saved PromQL chart configs now require `source` and no longer persist `connection`, so provisioned dashboards with PromQL tiles must set `source`.
+
+- 30debf92: speed up the sessions query by scoping the trace scan to RUM services
+- d341ba0f: fix: resolve row details with the primary key plus whichever of `_block_number`
+  / `_block_offset` the table persists, instead of falling back to the slow
+  full-row lookup when only one of `enable_block_number_column` /
+  `enable_block_offset_column` is set
+- 807cd9a5: fix: the webhook form now compiles the body template as you edit it and shows
+  the Handlebars error with its line and column. A broken template used to give
+  no feedback until an alert failed to deliver.
+- Updated dependencies [a682ce13]
+- Updated dependencies [9891a791]
+- Updated dependencies [43b09a7d]
+- Updated dependencies [cdfae457]
+- Updated dependencies [b00d4100]
+- Updated dependencies [a06b17fb]
+- Updated dependencies [5cabc115]
+- Updated dependencies [3bedfab3]
+- Updated dependencies [c94d12c3]
+- Updated dependencies [ecddea2a]
+- Updated dependencies [807cd9a5]
+  - @hyperdx/common-utils@0.31.1
+  - @hyperdx/api@2.41.1
+
 ## 2.41.0
 
 ### Minor Changes
