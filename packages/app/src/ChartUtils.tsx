@@ -1,12 +1,5 @@
 import { useMemo } from 'react';
 import { add, differenceInSeconds } from 'date-fns';
-import {
-  createSerializer,
-  parseAsBoolean,
-  parseAsFloat,
-  parseAsString,
-  parseAsStringEnum,
-} from 'nuqs';
 import SqlString from 'sqlstring';
 import { z } from 'zod';
 import {
@@ -57,7 +50,6 @@ import { notifications } from '@mantine/notifications';
 
 import DateRangeIndicator from './components/charts/DateRangeIndicator';
 import { MVOptimizationExplanationResult } from './hooks/useMVOptimizationExplanation';
-import { parseAsJsonEncoded, parseAsStringEncoded } from './utils/queryParsers';
 import {
   DEFAULT_SERIES_LIMIT,
   MAX_RENDERED_TIME_CHART_SERIES,
@@ -1415,6 +1407,42 @@ export function buildEventsSearchUrl({
 }
 
 /**
+ * Mirror of nuqs's URL value encoding (`encodeQueryValue`, nuqs 1.17). It is
+ * not exported by nuqs, and importing nuqs (or `./utils/queryParsers`, which
+ * calls `createParser` at module load) from this file runs code at import time
+ * that throws under the partial `jest.mock('nuqs')` used across the component
+ * test suite — so it is reproduced here rather than imported.
+ */
+const encodeNuqsQueryValue = (input: string) =>
+  input
+    .replace(/%/g, '%25')
+    .replace(/\+/g, '%2B')
+    .replace(/ /g, '+')
+    .replace(/#/g, '%23')
+    .replace(/&/g, '%26')
+    .replace(/"/g, '%22')
+    .replace(/'/g, '%27')
+    .replace(/`/g, '%60')
+    .replace(/</g, '%3C')
+    .replace(/>/g, '%3E');
+
+// `parseAsStringEncoded` / `parseAsJsonEncoded` serialize with
+// `encodeURIComponent`; nuqs then wraps the result in `encodeQueryValue`.
+const encodeEncodedParam = (value: string) =>
+  encodeNuqsQueryValue(encodeURIComponent(value));
+
+type SearchPageUrlParams = {
+  source: string;
+  where: string;
+  whereLanguage: 'sql' | 'lucene';
+  filters: Filter[];
+  isLive: boolean;
+  from: number;
+  to: number;
+  select?: string;
+};
+
+/**
  * Serialize the search page's query params exactly as nuqs does on that page.
  *
  * The search page reads and writes these params with nuqs, which double-encodes
@@ -1424,19 +1452,35 @@ export function buildEventsSearchUrl({
  * time range) reads a value like `%0A` back as a literal newline and re-renders
  * it with `encodeQueryValue`, which does not escape newlines/tabs/carriage
  * returns — the browser then strips those characters, silently joining
- * multi-line SQL (`and\nNamespace` → `andNamespace`). Serializing with nuqs's
- * own parsers keeps the URL stable across that read/write cycle.
+ * multi-line SQL (`and\nNamespace` → `andNamespace`). Matching nuqs's encoding
+ * keeps the URL stable across that read/write cycle.
  */
-const buildSearchPageUrl = createSerializer({
-  source: parseAsString,
-  where: parseAsStringEncoded,
-  whereLanguage: parseAsStringEnum<'sql' | 'lucene'>(['sql', 'lucene']),
-  filters: parseAsJsonEncoded<Filter[]>(),
-  isLive: parseAsBoolean,
-  from: parseAsFloat,
-  to: parseAsFloat,
-  select: parseAsStringEncoded,
-}).bind(null, '/search');
+function buildSearchPageUrl({
+  source,
+  where,
+  whereLanguage,
+  filters,
+  isLive,
+  from,
+  to,
+  select,
+}: SearchPageUrlParams): string {
+  // `parseAsString` / `parseAsFloat` / `parseAsBoolean` / `parseAsStringEnum`
+  // serialize to a bare string, then nuqs wraps it in `encodeQueryValue`.
+  const params = [
+    `source=${encodeNuqsQueryValue(source)}`,
+    `where=${encodeEncodedParam(where)}`,
+    `whereLanguage=${encodeNuqsQueryValue(whereLanguage)}`,
+    `filters=${encodeEncodedParam(JSON.stringify(filters))}`,
+    `isLive=${encodeNuqsQueryValue(String(isLive))}`,
+    `from=${encodeNuqsQueryValue(String(from))}`,
+    `to=${encodeNuqsQueryValue(String(to))}`,
+  ];
+  if (select) {
+    params.push(`select=${encodeEncodedParam(select)}`);
+  }
+  return `/search?${params.join('&')}`;
+}
 
 export function buildDashboardReplaySearchUrl({
   source,
