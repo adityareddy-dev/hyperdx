@@ -1500,7 +1500,7 @@ const Tile = ({
                       variant="default"
                       errorVariant="collapsible"
                       context={searchRowContext}
-                      filterOnAliasedExpressions
+                      isAdhocFilterTarget
                     />
                   </ChartContainer>
                 )}
